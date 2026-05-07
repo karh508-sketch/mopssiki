@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Flappy Pug Fullscreen — svitmopsikov</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Montserrat', sans-serif;
+            background: #4ec0ca; /* Класичне небо Flappy Bird */
+        }
+        #game-container {
+            position: relative;
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+        }
+        canvas {
+            display: block;
+            background-color: #70c5ce;
+            box-shadow: 0 0 50px rgba(0,0,0,0.3);
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 20px; text-align: center;
+            pointer-events: none; color: white;
+            text-shadow: 3px 3px 0 #000;
+        }
+        .score-board { font-size: 3rem; margin: 0; }
+        .best-score { font-size: 1.2rem; color: #f39c12; }
+        
+        .fs-button {
+            position: absolute; bottom: 20px; right: 20px;
+            padding: 12px 20px; background: rgba(255,255,255,0.2);
+            border: 2px solid white; color: white; border-radius: 10px;
+            cursor: pointer; font-weight: bold; transition: 0.3s;
+            pointer-events: auto;
+        }
+        .fs-button:hover { background: white; color: #4ec0ca; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="ui-overlay">
+            <div class="score-board" id="currentScore">0</div>
+            <div class="best-score" id="bestScore">RECORD: 0</div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <button class="fs-button" onclick="toggleFullScreen()">FULLSCREEN MODE</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("currentScore");
+        const bestElement = document.getElementById("bestScore");
+
+        // Адаптація розміру під екран
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Налаштування гри (Повільніші значення)
+        let pug = {
+            x: 100, y: canvas.height / 2,
+            width: 60, height: 60,
+            gravity: 0.4,   // Було 0.6
+            velocity: 0,
+            jump: -7        // Було -10 (плавніший стрибок)
+        };
+
+        let pipes = [];
+        let gap = 220;      // Ширший прохід для мопса
+        let score = 0;
+        let bestScore = localStorage.getItem('pugBestScore') || 0;
+        let gameSpeed = 2.5; // Було 3 (повільніший рух)
+        bestElement.innerText = `RECORD: ${bestScore}`;
+
+        function createPipe() {
+            let minPipeHeight = 50;
+            let maxPipeHeight = canvas.height - gap - minPipeHeight;
+            let height = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight)) + minPipeHeight;
+            pipes.push({
+                x: canvas.width,
+                y: 0,
+                width: 80,
+                height: height,
+                passed: false
+            });
+        }
+
+        function drawPug() {
+            ctx.font = "60px serif";
+            ctx.fillText("🐶", pug.x, pug.y + pug.height);
+        }
+
+        function drawPipes() {
+            ctx.fillStyle = "#75b855"; // Зелені труби
+            ctx.strokeStyle = "#2d4c1e";
+            ctx.lineWidth = 4;
+            
+            pipes.forEach(pipe => {
+                // Верхня труба
+                ctx.fillRect(pipe.x, pipe.y, pipe.width, pipe.height);
+                ctx.strokeRect(pipe.x, pipe.y, pipe.width, pipe.height);
+                
+                // Нижня труба
+                let bottomY = pipe.height + gap;
+                ctx.fillRect(pipe.x, bottomY, pipe.width, canvas.height - bottomY);
+                ctx.strokeRect(pipe.x, bottomY, pipe.width, canvas.height - bottomY);
+            });
+        }
+
+        function update() {
+            pug.velocity += pug.gravity;
+            pug.y += pug.velocity;
+
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 350) {
+                createPipe();
+            }
+
+            pipes.forEach((pipe, index) => {
+                pipe.x -= gameSpeed;
+
+                // Колізія (зіткнення)
+                if (
+                    pug.x < pipe.x + pipe.width &&
+                    pug.x + 40 > pipe.x && // 40 - невелика поправка на розмір емодзі
+                    (pug.y + 10 < pipe.height || pug.y + 50 > pipe.height + gap)
+                ) {
+                    gameOver();
+                }
+
+                // Нарахування очок
+                if (pipe.x + pipe.width < pug.x && !pipe.passed) {
+                    score++;
+                    scoreElement.innerText = score;
+                    pipe.passed = true;
+                    // Невелике прискорення кожні 5 очок для азарту
+                    if(score % 5 === 0) gameSpeed += 0.1;
+                }
+
+                if (pipe.x + pipe.width < 0) pipes.splice(index, 1);
+            });
+
+            if (pug.y + 60 > canvas.height || pug.y < 0) gameOver();
+        }
+
+        function gameOver() {
+            if (score > bestScore) {
+                bestScore = score;
+                localStorage.setItem('pugBestScore', bestScore);
+                bestElement.innerText = `RECORD: ${bestScore}`;
+            }
+            score = 0;
+            scoreElement.innerText = score;
+            gameSpeed = 2.5;
+            pug.y = canvas.height / 2;
+            pug.velocity = 0;
+            pipes = [];
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPipes();
+            drawPug();
+            update();
+            requestAnimationFrame(loop);
+        }
+
+        // Керування
+        function jump() {
+            pug.velocity = pug.jump;
+        }
+
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "Space" || e.code === "ArrowUp") jump();
+        });
+
+        canvas.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            jump();
+        });
+
+        canvas.addEventListener("mousedown", jump);
+
+        // Повноекранний режим
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        loop();
+    </script>
+</body>
+</html>
